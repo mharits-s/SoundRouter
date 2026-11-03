@@ -13,7 +13,7 @@ struct SourceCfg: Codable, Identifiable {
     var routes: [UInt32] = [1, 2]   // per source channel: bitmask of the output channels it feeds
 
     // "hearOriginal" was renamed: configs from when the option was still in the UI could be stuck on "keep playing the app
-    // on the speakers", which doubles every monitored sound (echo). The new key starts everyone muted, like Loopback.
+    // on the speakers", which doubles every monitored sound (echo). The new key starts everyone muted.
     enum CodingKeys: String, CodingKey { case id, kind, ref, title, gain, muted, inCh, routes; case hearOriginal = "hearOriginalKeep" }
 
     init(kind: Kind, ref: String, title: String, inCh: Int = 2) {

@@ -138,7 +138,8 @@ final class Store: ObservableObject {
         pendingWrite?.cancel()
         let w = DispatchWorkItem { [weak self] in
             self?.syncNames()
-            for t in [0.6, 1.2, 2.0, 3.0] { DispatchQueue.main.asyncAfter(deadline: .now() + t) { self?.tick(route: false) } }
+            // route too: a channel change removes + re-adds the device, so restart its routes as soon as it is back
+            for t in [0.5, 0.8, 1.2, 2.0, 3.0] { DispatchQueue.main.asyncAfter(deadline: .now() + t) { self?.tick() } }
         }
         pendingWrite = w
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: w)
@@ -269,7 +270,7 @@ struct ContentView: View {
         }
         .onAppear { store.sel = store.sel ?? store.devices.first?.id }
         .toolbar {
-            ToolbarItem(placement: .principal) {   // app logo next to the name in the title bar (like Loopback)
+            ToolbarItem(placement: .principal) {   // app logo next to the name in the title bar
                 HStack(spacing: 6) {
                     Image(nsImage: NSApp.applicationIconImage).resizable().interpolation(.high).frame(width: 20, height: 20)
                     Text("SoundRouter").font(.headline)
@@ -617,7 +618,7 @@ struct DeviceDetail: View {
     @State private var dots: [String: CGPoint] = [:]
     @State private var hover: Link?
     @State private var drag: Drag?
-    // selection: a clicked card / cable is "active"; the footer Delete button deletes it (there is no keyboard shortcut for deleting)
+    // selection: a clicked card / cable is "active"; the footer Delete button deletes it (⌫ also deletes an active cable)
     enum Sel: Hashable { case source(UUID), pair(Int), monitor(UUID), cable(String) }
     @State private var sel: Sel?
     @State private var pointerIsHand = false
@@ -648,6 +649,10 @@ struct DeviceDetail: View {
                 Button(role: .destructive) { deleteSelection() } label: { Label("Delete", systemImage: "trash") }
                     .disabled(!canDelete)
                     .help(canDelete ? "Delete “\(selectionName ?? "")”" : "Click a card or a cable to make it active, then press Delete")
+                    .background {   // ⌫ unplugs the active cable (cards still need the Delete button)
+                        Button("") { deleteSelection() }.keyboardShortcut(.delete, modifiers: []).opacity(0).accessibilityHidden(true)
+                            .disabled({ if case .cable? = sel { return renaming || !canDelete } else { return true } }())
+                    }
                 Spacer()
                 Button { withAnimation { showMonitors.toggle() } } label: {
                     Label(showMonitors ? "Hide Monitors" : "Show Monitors", systemImage: showMonitors ? "eye.slash" : "eye")
@@ -750,7 +755,12 @@ struct DeviceDetail: View {
         if drag != nil { drag?.at = v.location; updateSnap(); return }
         let p = v.startLocation
         if let k = nearestDot(at: p, in: dots, kinds: [.src, .oin, .oout, .mon]) {
-            drag = Drag(start: k, moving: nil, origin: p, at: v.location, snap: nil)
+            // a plugged dot behaves like a jack: dragging it pulls its cable out (dropped on empty space = unplugged)
+            if !NSEvent.modifierFlags.contains(.option), let l = links.last(where: { $0.from == k || $0.to == k }) {   // ⌥ = start a new cable from a plugged dot
+                drag = Drag(start: nil, moving: (l, l.from == k ? l.to : l.from), origin: p, at: v.location, snap: nil)
+            } else {
+                drag = Drag(start: k, moving: nil, origin: p, at: v.location, snap: nil)
+            }
         } else if let l = Patch.hit(p, links: links, dots: dots), let a = dots[l.from], let b = dots[l.to] {
             // grabbing a cable: the end nearer the pointer comes loose, the other end stays put
             let fixed = hypot(p.x - a.x, p.y - a.y) > hypot(p.x - b.x, p.y - b.y) ? l.from : l.to
@@ -775,7 +785,7 @@ struct DeviceDetail: View {
         guard let g = drag, g.start != nil || g.moving != nil else { return }
         stopRename()
         if hypot(v.location.x - g.origin.x, v.location.y - g.origin.y) < 3 {   // a click, not a drag
-            if let m = g.moving { select(.cable(m.link.id)) }                  // click on a cable = select it (⌫ deletes)
+            if let m = g.moving, nearestDot(at: g.origin, in: dots, kinds: [.src, .oin, .oout, .mon]) == nil { select(.cable(m.link.id)) }                  // click on a cable = select it (⌫ deletes)
             return
         }
         let drop = Patch.drop(start: g.start, moving: g.moving, at: v.location, dots: dots)
@@ -797,7 +807,7 @@ struct DeviceDetail: View {
     func cables(_ links: [Link]) -> some View {
         ZStack {
             ForEach(links, id: \.id) { l in
-                if let a = dots[l.from], let b = dots[l.to], l != drag?.moving?.link {
+                if let a = dots[l.from], let b = dots[l.to], !(l == drag?.moving?.link && hypot(drag!.at.x - drag!.origin.x, drag!.at.y - drag!.origin.y) >= 3) {
                     let hot = l == hover, picked = sel == .cable(l.id)
                     Cable(from: a, to: b)
                         .stroke(picked ? Color.primary : (hot ? Theme.teal : Theme.teal.opacity(dim(l) ? 0.25 : 0.9)),

@@ -191,6 +191,7 @@ final class Engine {
         guard ProcessInfo.processInfo.environment["SR_UI_ONLY"] == nil else { return }   // UI-only mode: no taps, no permission prompts (for screenshots/QA)
         let procs = HAL.processes()
         let me = HAL.ownProcess()
+        var offMons = Set<UUID>()   // monitors that are switched off: they stay in the aggregate (gain 0) so toggling never restarts a route
         var want: [UUID: (sig: String, gain: Float, masks: [UInt32], mons: [MonitorCfg], make: (Active) -> Bool)] = [:]
 
         for vd in devs {
@@ -198,7 +199,8 @@ final class Engine {
             guard vd.enabled, vd.slot >= 0, let dest = HAL.device(uid: destUID) else { continue }
             let vCh = HAL.channels(dest, input: false)  // the published channel count: a change re-creates the routes
             // monitors = extra sub-devices of every source route of this device; their set is part of the signature
-            let mons = vd.monitors.filter { $0.on && $0.uid != destUID && HAL.device(uid: $0.uid) != nil }
+            let mons = vd.monitors.filter { $0.uid != destUID && HAL.device(uid: $0.uid) != nil }.map { m -> MonitorCfg in
+                var m = m; if !m.on { m.gain = 0; offMons.insert(m.id) }; return m }
             let monUIDs = mons.map(\.uid)
             for s in vd.sources where !s.muted {   // Off = not routed at all (no tap, no indicator)
                 let inCh = s.inCh
@@ -241,7 +243,7 @@ final class Engine {
             if w.make(a) { a.setMons(w.mons); routes[k] = a }
         }
         // a monitor is live while at least one running source route feeds it
-        let fed = Set(routes.values.flatMap(\.monIDs))
+        let fed = Set(routes.values.flatMap(\.monIDs)).subtracting(offMons)
         markers = markers.filter { fed.contains($0.key) }
         for id in fed where markers[id] == nil { markers[id] = Active() }
     }
