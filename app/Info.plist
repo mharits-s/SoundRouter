@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>SoundRouter</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
+<key>CFBundleIdentifier</key><string>com.soundrouter.app</string>
+<key>CFBundleName</key><string>SoundRouter</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>1.0</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>LSMinimumSystemVersion</key><string>14.2</string>
+<key>NSHighResolutionCapable</key><true/>
+<key>NSPrincipalClass</key><string>NSApplication</string>
+<key>NSAudioCaptureUsageDescription</key><string>SoundRouter captures audio from the apps you route into virtual devices.</string>
+<key>NSMicrophoneUsageDescription</key><string>SoundRouter mixes your input devices into virtual devices.</string>
+</dict></plist>
